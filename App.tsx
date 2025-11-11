@@ -26,6 +26,12 @@ const App: React.FC = () => {
   const [newTaskText, setNewTaskText] = useState('');
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [deletingTasks, setDeletingTasks] = useState<Set<number>>(new Set());
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   const getTasks = useCallback(async () => {
     try {
@@ -74,6 +80,11 @@ const App: React.FC = () => {
   };
 
   const handleDeleteTask = async (taskId: number) => {
+    if (deletingTasks.has(taskId)) return;
+
+    // Start exit animation
+    setDeletingTasks(prev => new Set(prev).add(taskId));
+
     try {
         const response = await fetch('/api/deleteTask', {
             method: 'DELETE',
@@ -87,26 +98,45 @@ const App: React.FC = () => {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
         
-        // UIを即時更新
-        setTasks(tasks.filter(task => task.id !== taskId));
+        // Wait for animation to complete, then remove from state
+        setTimeout(() => {
+            setTasks(tasks => tasks.filter(task => task.id !== taskId));
+            setDeletingTasks(prev => {
+                const newSet = new Set(prev);
+                newSet.delete(taskId);
+                return newSet;
+            });
+        }, 400); // Corresponds to animation duration
 
     } catch (e) {
         const errorMessage = e instanceof Error ? e.message : 'An unknown error occurred';
         setError(`Failed to delete task: ${errorMessage}`);
+        // If API fails, revert animation
+        setDeletingTasks(prev => {
+            const newSet = new Set(prev);
+            newSet.delete(taskId);
+            return newSet;
+        });
     }
   };
 
   return (
     <div className="min-h-screen bg-gray-900 text-white flex flex-col items-center pt-8 sm:pt-16 px-4">
       <div className="w-full max-w-2xl">
-        <header className="text-center mb-8">
+        <header 
+          className={`text-center mb-8 transition-all duration-500 ${isMounted ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-5'}`}
+          style={{ transitionDelay: '100ms' }}
+        >
             <h1 className="text-4xl sm:text-5xl font-bold bg-gradient-to-r from-purple-400 to-pink-500 text-transparent bg-clip-text">
-                Vercel ToDo List
+                Nebula Tasks
             </h1>
             <p className="text-gray-400 mt-2">Powered by React, Vercel Functions & Postgres</p>
         </header>
 
-        <main className="bg-gray-800 rounded-lg shadow-2xl p-6">
+        <main 
+          className={`bg-gray-800 rounded-lg shadow-2xl p-6 transition-all duration-500 ${isMounted ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-5'}`}
+          style={{ transitionDelay: '200ms' }}
+        >
           <form onSubmit={handleAddTask} className="flex gap-4 mb-6">
             <input
               type="text"
@@ -129,14 +159,21 @@ const App: React.FC = () => {
           <div className="space-y-4">
             {loading ? (
               <div className="text-center text-gray-400">Loading tasks...</div>
-            ) : tasks.length === 0 ? (
-              <div className="text-center text-gray-400 py-8">
+            ) : tasks.length === 0 && !loading ? (
+              <div className="text-center text-gray-400 py-8 animate-load opacity-0">
                 <p>No tasks yet. Add one above to get started!</p>
               </div>
             ) : (
                 <ul className="space-y-3">
                 {tasks.map((task) => (
-                    <li key={task.id} className="bg-gray-700/50 rounded-lg p-4 flex items-center gap-4 border border-gray-700 hover:border-purple-500 transition-all duration-300 group">
+                    <li 
+                      key={task.id} 
+                      className={`
+                        bg-gray-700/50 rounded-lg p-4 flex items-center gap-4 border border-gray-700
+                        hover:border-purple-500 transition-all duration-300 group
+                        ${deletingTasks.has(task.id) ? 'task-item-exit' : 'task-item-enter'}
+                      `}
+                    >
                         <CheckIcon className="w-6 h-6 text-green-400 flex-shrink-0" />
                         <span className="flex-grow text-gray-200">{task.text}</span>
                         <span className="text-xs text-gray-500 flex-shrink-0">
@@ -146,6 +183,7 @@ const App: React.FC = () => {
                             onClick={() => handleDeleteTask(task.id)}
                             className="text-gray-500 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100 flex-shrink-0"
                             aria-label={`Delete task: ${task.text}`}
+                            disabled={deletingTasks.has(task.id)}
                         >
                             <TrashIcon className="w-5 h-5" />
                         </button>
