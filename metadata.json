@@ -1,0 +1,5 @@
+{
+  "name": "nebula-tasks",
+  "description": "A sleek, full-stack ToDo list application built on a modern serverless stack: React (Vite), Vercel Functions, and Vercel Postgres. Explore the power of the Jamstack architecture.",
+  "requestFramePermissions": []
+}
